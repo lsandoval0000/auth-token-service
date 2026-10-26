@@ -1,0 +1,22 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: auth-token-api
+  labels:
+    app: auth-token-api
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: auth-token-api
+  template:
+    metadata:
+      labels:
+        app: auth-token-api
+    spec:
+      containers:
+        - name: auth-token-api
+          image: localhost/auth-token-api:1.0
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 8081

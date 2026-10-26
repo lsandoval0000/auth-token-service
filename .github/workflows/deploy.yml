@@ -1,0 +1,56 @@
+name: Deploy Token API
+
+on:
+  push:
+    branches:
+      - master
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: [self-hosted]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set image tag
+        id: vars
+        run: echo "TAG=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
+
+      - name: Make mvnw executable
+        #working-directory: src/.mvn
+        run: chmod +x mvnw
+
+      - name: Build Quarkus app
+        #working-directory: src
+        run: ./mvnw clean package -DskipTests
+
+      - name: Build image
+        #working-directory: src
+        run: podman build -f src/main/docker/Dockerfile.jvm --no-cache -t localhost/auth-token-api:${TAG} .
+
+      - name: Save image
+        run: podman save localhost/auth-token-api:${TAG} -o auth-token-api.tar
+
+      - name: Import into k3s
+        run: sudo k3s ctr images import auth-token-api.tar
+
+      - name: Create namespace
+        run: |
+          kubectl create namespace cqrs-lab \
+          --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Apply Kubernetes manifests
+        run: |
+          kubectl apply -f k8s/deployment.yaml -n cqrs-lab
+          kubectl apply -f k8s/service.yaml -n cqrs-lab
+
+      - name: Update deployment image
+        run: |
+          kubectl set image deployment/auth-token-api \
+          auth-token-api=localhost/auth-token-api:${TAG} -n cqrs-lab
+
+      - name: Restart rollout
+        run: |
+          kubectl rollout status deployment/auth-token-api -n cqrs-lab
